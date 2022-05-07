@@ -4,9 +4,9 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"github.com/jasper-zsh/hijacker-proxy/errors"
-	"github.com/jasper-zsh/hijacker-proxy/models"
-	"github.com/jasper-zsh/hijacker-proxy/types"
+	"github.com/jasper-zsh/ones-hijacker-proxy/errors"
+	"github.com/jasper-zsh/ones-hijacker-proxy/models"
+	"github.com/jasper-zsh/ones-hijacker-proxy/types"
 	"gopkg.in/elazarl/goproxy.v1"
 	"net/http"
 	"regexp"
@@ -142,7 +142,7 @@ func (h *ONESRequestHandler) login(ctx *goproxy.ProxyCtx) error {
 	loginUrl := fmt.Sprintf("%s/auth/login", h.instance.BaseURL)
 	req, err := http.NewRequest("POST", loginUrl, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Referer", "https://dev.myones.net/project/master/")
+	req.Header.Set("Referer", ctx.Req.Header.Get("Referer"))
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err

@@ -1,10 +1,10 @@
 package main
 
 import (
-	"github.com/jasper-zsh/hijacker-proxy/control"
-	"github.com/jasper-zsh/hijacker-proxy/dao"
-	"github.com/jasper-zsh/hijacker-proxy/errors"
-	"github.com/jasper-zsh/hijacker-proxy/handlers"
+	"github.com/jasper-zsh/ones-hijacker-proxy/control"
+	"github.com/jasper-zsh/ones-hijacker-proxy/dao"
+	"github.com/jasper-zsh/ones-hijacker-proxy/errors"
+	"github.com/jasper-zsh/ones-hijacker-proxy/handlers"
 	"gopkg.in/elazarl/goproxy.v1"
 	"net/http"
 	_ "net/http/pprof"

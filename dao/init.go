@@ -1,7 +1,7 @@
 package dao
 
 import (
-	"github.com/jasper-zsh/hijacker-proxy/models"
+	"github.com/jasper-zsh/ones-hijacker-proxy/models"
 	"gorm.io/driver/sqlite"
 	"gorm.io/gorm"
 )

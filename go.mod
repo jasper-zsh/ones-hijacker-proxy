@@ -1,4 +1,4 @@
-module github.com/jasper-zsh/ones-hijacker-proxy
+module github.com/jasper-zsh/ones-ones-hijacker-proxy
 
 go 1.18
 

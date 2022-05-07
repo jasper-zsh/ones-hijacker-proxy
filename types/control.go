@@ -1,6 +1,6 @@
 package types
 
-import "github.com/jasper-zsh/hijacker-proxy/models"
+import "github.com/jasper-zsh/ones-hijacker-proxy/models"
 
 type AuthInfo struct {
 	Email    string `json:"email"`

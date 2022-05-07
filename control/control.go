@@ -1,9 +1,9 @@
 package control
 
 import (
-	"github.com/jasper-zsh/hijacker-proxy/handlers"
-	"github.com/jasper-zsh/hijacker-proxy/models"
-	"github.com/jasper-zsh/hijacker-proxy/types"
+	"github.com/jasper-zsh/ones-hijacker-proxy/handlers"
+	"github.com/jasper-zsh/ones-hijacker-proxy/models"
+	"github.com/jasper-zsh/ones-hijacker-proxy/types"
 	"github.com/kataras/iris/v12"
 	"gorm.io/gorm"
 )
