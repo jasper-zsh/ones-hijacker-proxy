@@ -3,24 +3,30 @@ package services
 import (
 	"github.com/jasper-zsh/ones-hijacker-proxy/handlers"
 	"github.com/jasper-zsh/ones-hijacker-proxy/models"
+	"go.uber.org/dig"
 	"gorm.io/gorm"
 )
 
-type InstanceService struct {
-	*HandlerAwareService
-	*DatabaseAwareService
+type InstanceServiceDeps struct {
+	dig.In
+
+	DB      *gorm.DB
+	Handler *handlers.ONESRequestHandler
 }
 
-func NewInstanceService(db *gorm.DB, handler *handlers.ONESRequestHandler) *InstanceService {
+type InstanceService struct {
+	deps InstanceServiceDeps
+}
+
+func NewInstanceService(deps InstanceServiceDeps) *InstanceService {
 	return &InstanceService{
-		NewHandlerAwareService(handler),
-		NewDatabaseAwareService(db),
+		deps,
 	}
 }
 
 func (s *InstanceService) ListInstances() ([]*models.Instance, error) {
 	var instances []*models.Instance
-	q := s.db.Find(&instances)
+	q := s.deps.DB.Find(&instances)
 	if q.Error != nil {
 		return nil, q.Error
 	}
@@ -29,7 +35,7 @@ func (s *InstanceService) ListInstances() ([]*models.Instance, error) {
 }
 
 func (s *InstanceService) SaveInstance(instance *models.Instance) error {
-	q := s.db.Save(instance)
+	q := s.deps.DB.Save(instance)
 	if q.Error != nil {
 		return q.Error
 	}
@@ -37,7 +43,7 @@ func (s *InstanceService) SaveInstance(instance *models.Instance) error {
 }
 
 func (s *InstanceService) DeleteInstance(id uint) error {
-	q := s.db.Delete(&models.Instance{}, id)
+	q := s.deps.DB.Delete(&models.Instance{}, id)
 	if q.Error != nil {
 		return q.Error
 	}
@@ -47,19 +53,19 @@ func (s *InstanceService) DeleteInstance(id uint) error {
 
 func (s *InstanceService) SelectInstance(id uint) error {
 	var instance *models.Instance
-	q := s.db.First(&instance, id)
+	q := s.deps.DB.First(&instance, id)
 	if q.Error != nil {
 		return q.Error
 	}
 
-	originInstance := s.handler.Instance()
-	originAuth := s.handler.AuthInfo()
-	s.handler.ClearAuthInfo()
-	s.handler.SetInstance(instance)
-	err := s.handler.Login(nil)
+	originInstance := s.deps.Handler.Instance()
+	originAuth := s.deps.Handler.AuthInfo()
+	s.deps.Handler.ClearAuthInfo()
+	s.deps.Handler.SetInstance(instance)
+	err := s.deps.Handler.Login(nil)
 	if err != nil {
-		s.handler.SetInstance(originInstance)
-		s.handler.SetAuthInfo(originAuth)
+		s.deps.Handler.SetInstance(originInstance)
+		s.deps.Handler.SetAuthInfo(originAuth)
 		return err
 	}
 	return nil

@@ -1,2 +1,6 @@
 *.db
 /.idea
+
+# Build result executable files
+ones-hijacker-proxy
+ones-hijacker-proxy.*

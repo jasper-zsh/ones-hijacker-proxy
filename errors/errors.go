@@ -1,7 +1,7 @@
 package errors
 
 import (
-	"gopkg.in/elazarl/goproxy.v1"
+	"github.com/elazarl/goproxy"
 	"net/http"
 )
 

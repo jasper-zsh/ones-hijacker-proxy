@@ -4,24 +4,30 @@ import (
 	"github.com/jasper-zsh/ones-hijacker-proxy/handlers"
 	"github.com/jasper-zsh/ones-hijacker-proxy/models"
 	"github.com/jasper-zsh/ones-hijacker-proxy/types"
+	"go.uber.org/dig"
 	"gorm.io/gorm"
 )
 
-type AccountService struct {
-	*HandlerAwareService
-	*DatabaseAwareService
+type AccountServiceDeps struct {
+	dig.In
+
+	DB      *gorm.DB
+	Handler *handlers.ONESRequestHandler
 }
 
-func NewAccountService(db *gorm.DB, handler *handlers.ONESRequestHandler) *AccountService {
+type AccountService struct {
+	deps AccountServiceDeps
+}
+
+func NewAccountService(deps AccountServiceDeps) *AccountService {
 	return &AccountService{
-		NewHandlerAwareService(handler),
-		NewDatabaseAwareService(db),
+		deps,
 	}
 }
 
 func (s *AccountService) ListAccounts() ([]*models.Account, error) {
 	var accounts []*models.Account
-	q := s.db.Find(&accounts)
+	q := s.deps.DB.Find(&accounts)
 	if q.Error != nil {
 		return nil, q.Error
 	}
@@ -29,7 +35,7 @@ func (s *AccountService) ListAccounts() ([]*models.Account, error) {
 }
 
 func (s *AccountService) SaveAccount(account *models.Account) error {
-	q := s.db.Save(account)
+	q := s.deps.DB.Save(account)
 	if q.Error != nil {
 		return q.Error
 	}
@@ -37,7 +43,7 @@ func (s *AccountService) SaveAccount(account *models.Account) error {
 }
 
 func (s *AccountService) DeleteAccount(id uint) error {
-	q := s.db.Delete(&models.Account{}, id)
+	q := s.deps.DB.Delete(&models.Account{}, id)
 	if q.Error != nil {
 		return q.Error
 	}
@@ -46,24 +52,24 @@ func (s *AccountService) DeleteAccount(id uint) error {
 
 func (s *AccountService) SelectAccount(id uint) error {
 	var account *models.Account
-	q := s.db.First(&account, id)
+	q := s.deps.DB.First(&account, id)
 	if q.Error != nil {
 		return q.Error
 	}
 
-	originAccount := s.handler.Account()
-	originAuth := s.handler.AuthInfo()
-	s.handler.ClearAuthInfo()
-	s.handler.SetAccount(account)
-	s.handler.SetAuthUpdatedCallback(func(info *types.User) {
+	originAccount := s.deps.Handler.Account()
+	originAuth := s.deps.Handler.AuthInfo()
+	s.deps.Handler.ClearAuthInfo()
+	s.deps.Handler.SetAccount(account)
+	s.deps.Handler.SetAuthUpdatedCallback(func(info *types.User) {
 		account.Token = info.Token
 		account.UserUUID = info.UUID
-		s.db.Save(account)
+		s.deps.DB.Save(account)
 	})
-	err := s.handler.Login(nil)
+	err := s.deps.Handler.Login(nil)
 	if err != nil {
-		s.handler.SetAccount(originAccount)
-		s.handler.SetAuthInfo(originAuth)
+		s.deps.Handler.SetAccount(originAccount)
+		s.deps.Handler.SetAuthInfo(originAuth)
 		return err
 	}
 	return nil

@@ -7,26 +7,32 @@ import (
 	"github.com/jasper-zsh/ones-hijacker-proxy/types"
 	"github.com/kataras/iris/v12"
 	"github.com/kataras/iris/v12/middleware/cors"
+	"go.uber.org/dig"
 	"gorm.io/gorm"
 )
 
-type Control struct {
-	app             *iris.Application
-	db              *gorm.DB
-	ones            *handlers.ONESRequestHandler
-	accountService  *services.AccountService
-	instanceService *services.InstanceService
+type ControlDeps struct {
+	dig.In
+
+	DB              *gorm.DB
+	Handler         *handlers.ONESRequestHandler
+	AccountService  *services.AccountService
+	InstanceService *services.InstanceService
 }
 
-func NewControl(db *gorm.DB, ones *handlers.ONESRequestHandler, accountService *services.AccountService,
-	instanceService *services.InstanceService) *Control {
-	c := &Control{
-		app:             iris.New(),
-		db:              db,
-		ones:            ones,
-		accountService:  accountService,
-		instanceService: instanceService,
+type Control struct {
+	deps ControlDeps
+	app  *iris.Application
+}
+
+func NewControl(deps ControlDeps) *Control {
+	return &Control{
+		deps: deps,
+		app:  iris.New(),
 	}
+}
+
+func (c *Control) Run() {
 	c.app.UseRouter(cors.New().Handler())
 	c.app.Get("/status", c.status)
 	c.app.Get("/instances", c.listInstances)
@@ -39,35 +45,31 @@ func NewControl(db *gorm.DB, ones *handlers.ONESRequestHandler, accountService *
 	c.app.Post("/accounts/{id:uint}", c.updateAccount)
 	c.app.Delete("/accounts/{id:uint}", c.deleteAccount)
 	c.app.Post("/accounts/{id:uint}/select", c.selectAccount)
-	return c
+	c.app.Listen(":9090")
 }
 
 func (c *Control) SelectDefaultInstance() error {
 	var instance models.Instance
-	q := c.db.First(&instance)
+	q := c.deps.DB.First(&instance)
 	if q.Error != nil {
 		return q.Error
 	}
-	c.ones.SetInstance(&instance)
+	c.deps.Handler.SetInstance(&instance)
 	return nil
 }
 
 func (c *Control) SelectDefaultAccount() error {
 	var account models.Account
-	q := c.db.First(&account)
+	q := c.deps.DB.First(&account)
 	if q.Error != nil {
 		return q.Error
 	}
-	c.ones.SetAccount(&account)
+	c.deps.Handler.SetAccount(&account)
 	return nil
 }
 
-func (c *Control) Run() {
-	c.app.Listen(":9090")
-}
-
 func (c *Control) listInstances(ctx iris.Context) {
-	instances, err := c.instanceService.ListInstances()
+	instances, err := c.deps.InstanceService.ListInstances()
 	if err != nil {
 		ctx.StopWithError(500, err)
 		return
@@ -79,7 +81,7 @@ func (c *Control) createInstance(ctx iris.Context) {
 	var instance models.Instance
 	ctx.ReadJSON(&instance)
 
-	err := c.instanceService.SaveInstance(&instance)
+	err := c.deps.InstanceService.SaveInstance(&instance)
 	if err != nil {
 		ctx.StopWithError(500, err)
 		return
@@ -100,7 +102,7 @@ func (c *Control) updateInstance(ctx iris.Context) {
 		return
 	}
 	instance.ID = id
-	err = c.instanceService.SaveInstance(&instance)
+	err = c.deps.InstanceService.SaveInstance(&instance)
 	if err != nil {
 		ctx.StopWithError(500, err)
 		return
@@ -115,7 +117,7 @@ func (c *Control) deleteInstance(ctx iris.Context) {
 		ctx.StopWithError(500, err)
 		return
 	}
-	err = c.instanceService.DeleteInstance(id)
+	err = c.deps.InstanceService.DeleteInstance(id)
 	if err != nil {
 		ctx.StopWithError(500, err)
 		return
@@ -130,10 +132,10 @@ func (c *Control) selectInstance(ctx iris.Context) {
 		return
 	}
 
-	err = c.instanceService.SelectInstance(id)
+	err = c.deps.InstanceService.SelectInstance(id)
 	resp := &types.StatusResponse{
-		Account:  c.ones.Account(),
-		Instance: c.ones.Instance(),
+		Account:  c.deps.Handler.Account(),
+		Instance: c.deps.Handler.Instance(),
 	}
 	if err != nil {
 		resp.ErrorMsg = err.Error()
@@ -143,7 +145,7 @@ func (c *Control) selectInstance(ctx iris.Context) {
 }
 
 func (c *Control) listAccounts(ctx iris.Context) {
-	accounts, err := c.accountService.ListAccounts()
+	accounts, err := c.deps.AccountService.ListAccounts()
 	if err != nil {
 		ctx.StopWithError(500, err)
 		return
@@ -156,7 +158,7 @@ func (c *Control) createAccount(ctx iris.Context) {
 	var account models.Account
 	ctx.ReadJSON(&account)
 
-	c.accountService.SaveAccount(&account)
+	c.deps.AccountService.SaveAccount(&account)
 	ctx.JSON(account)
 }
 
@@ -173,7 +175,7 @@ func (c *Control) updateAccount(ctx iris.Context) {
 		return
 	}
 	account.ID = id
-	err = c.accountService.SaveAccount(&account)
+	err = c.deps.AccountService.SaveAccount(&account)
 	if err != nil {
 		ctx.StopWithError(500, err)
 		return
@@ -188,7 +190,7 @@ func (c *Control) deleteAccount(ctx iris.Context) {
 		return
 	}
 
-	err = c.accountService.DeleteAccount(id)
+	err = c.deps.AccountService.DeleteAccount(id)
 	if err != nil {
 		ctx.StopWithError(500, err)
 		return
@@ -203,10 +205,10 @@ func (c *Control) selectAccount(ctx iris.Context) {
 		return
 	}
 
-	err = c.accountService.SelectAccount(id)
+	err = c.deps.AccountService.SelectAccount(id)
 	resp := &types.StatusResponse{
-		Account:  c.ones.Account(),
-		Instance: c.ones.Instance(),
+		Account:  c.deps.Handler.Account(),
+		Instance: c.deps.Handler.Instance(),
 	}
 	if err != nil {
 		resp.ErrorMsg = err.Error()
@@ -216,8 +218,8 @@ func (c *Control) selectAccount(ctx iris.Context) {
 
 func (c *Control) status(ctx iris.Context) {
 	status := &types.StatusResponse{
-		Account:  c.ones.Account(),
-		Instance: c.ones.Instance(),
+		Account:  c.deps.Handler.Account(),
+		Instance: c.deps.Handler.Instance(),
 	}
 	ctx.JSON(status)
 }
