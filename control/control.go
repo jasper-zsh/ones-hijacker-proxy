@@ -3,30 +3,40 @@ package control
 import (
 	"github.com/jasper-zsh/ones-hijacker-proxy/handlers"
 	"github.com/jasper-zsh/ones-hijacker-proxy/models"
+	"github.com/jasper-zsh/ones-hijacker-proxy/services"
 	"github.com/jasper-zsh/ones-hijacker-proxy/types"
 	"github.com/kataras/iris/v12"
+	"github.com/kataras/iris/v12/middleware/cors"
 	"gorm.io/gorm"
 )
 
 type Control struct {
-	app  *iris.Application
-	db   *gorm.DB
-	ones *handlers.ONESRequestHandler
+	app             *iris.Application
+	db              *gorm.DB
+	ones            *handlers.ONESRequestHandler
+	accountService  *services.AccountService
+	instanceService *services.InstanceService
 }
 
-func NewControl(db *gorm.DB, ones *handlers.ONESRequestHandler) *Control {
+func NewControl(db *gorm.DB, ones *handlers.ONESRequestHandler, accountService *services.AccountService,
+	instanceService *services.InstanceService) *Control {
 	c := &Control{
-		app:  iris.New(),
-		db:   db,
-		ones: ones,
+		app:             iris.New(),
+		db:              db,
+		ones:            ones,
+		accountService:  accountService,
+		instanceService: instanceService,
 	}
+	c.app.UseRouter(cors.New().Handler())
 	c.app.Get("/status", c.status)
 	c.app.Get("/instances", c.listInstances)
 	c.app.Post("/instances", c.createInstance)
+	c.app.Post("/instances/{id:uint}", c.updateInstance)
 	c.app.Delete("/instances/{id:uint}", c.deleteInstance)
 	c.app.Post("/instances/{id:uint}/select", c.selectInstance)
 	c.app.Get("/accounts", c.listAccounts)
 	c.app.Post("/accounts", c.createAccount)
+	c.app.Post("/accounts/{id:uint}", c.updateAccount)
 	c.app.Delete("/accounts/{id:uint}", c.deleteAccount)
 	c.app.Post("/accounts/{id:uint}/select", c.selectAccount)
 	return c
@@ -57,10 +67,9 @@ func (c *Control) Run() {
 }
 
 func (c *Control) listInstances(ctx iris.Context) {
-	var instances []models.Instance
-	q := c.db.Find(&instances)
-	if q.Error != nil {
-		ctx.StopWithError(500, q.Error)
+	instances, err := c.instanceService.ListInstances()
+	if err != nil {
+		ctx.StopWithError(500, err)
 		return
 	}
 	ctx.JSON(instances)
@@ -70,7 +79,33 @@ func (c *Control) createInstance(ctx iris.Context) {
 	var instance models.Instance
 	ctx.ReadJSON(&instance)
 
-	c.db.Save(&instance)
+	err := c.instanceService.SaveInstance(&instance)
+	if err != nil {
+		ctx.StopWithError(500, err)
+		return
+	}
+	ctx.JSON(instance)
+}
+
+func (c *Control) updateInstance(ctx iris.Context) {
+	id, err := ctx.Params().GetUint("id")
+	if err != nil {
+		ctx.StopWithError(500, err)
+		return
+	}
+	var instance models.Instance
+	err = ctx.ReadJSON(&instance)
+	if err != nil {
+		ctx.StopWithError(500, err)
+		return
+	}
+	instance.ID = id
+	err = c.instanceService.SaveInstance(&instance)
+	if err != nil {
+		ctx.StopWithError(500, err)
+		return
+	}
+
 	ctx.JSON(instance)
 }
 
@@ -80,9 +115,9 @@ func (c *Control) deleteInstance(ctx iris.Context) {
 		ctx.StopWithError(500, err)
 		return
 	}
-	q := c.db.Delete(&models.Instance{}, id)
-	if q.Error != nil {
-		ctx.StopWithError(500, q.Error)
+	err = c.instanceService.DeleteInstance(id)
+	if err != nil {
+		ctx.StopWithError(500, err)
 		return
 	}
 	ctx.StopWithStatus(204)
@@ -94,21 +129,23 @@ func (c *Control) selectInstance(ctx iris.Context) {
 		ctx.StopWithError(500, err)
 		return
 	}
-	var instance models.Instance
-	q := c.db.First(&instance, id)
-	if q.Error != nil {
-		ctx.StopWithError(500, q.Error)
-		return
+
+	err = c.instanceService.SelectInstance(id)
+	resp := &types.StatusResponse{
+		Account:  c.ones.Account(),
+		Instance: c.ones.Instance(),
 	}
-	c.ones.SetInstance(&instance)
-	c.status(ctx)
+	if err != nil {
+		resp.ErrorMsg = err.Error()
+	}
+
+	ctx.JSON(resp)
 }
 
 func (c *Control) listAccounts(ctx iris.Context) {
-	var accounts []models.Account
-	q := c.db.Find(&accounts)
-	if q.Error != nil {
-		ctx.StopWithError(500, q.Error)
+	accounts, err := c.accountService.ListAccounts()
+	if err != nil {
+		ctx.StopWithError(500, err)
 		return
 	}
 
@@ -119,7 +156,28 @@ func (c *Control) createAccount(ctx iris.Context) {
 	var account models.Account
 	ctx.ReadJSON(&account)
 
-	c.db.Save(&account)
+	c.accountService.SaveAccount(&account)
+	ctx.JSON(account)
+}
+
+func (c *Control) updateAccount(ctx iris.Context) {
+	id, err := ctx.Params().GetUint("id")
+	if err != nil {
+		ctx.StopWithError(500, err)
+		return
+	}
+	var account models.Account
+	err = ctx.ReadJSON(&account)
+	if err != nil {
+		ctx.StopWithError(500, err)
+		return
+	}
+	account.ID = id
+	err = c.accountService.SaveAccount(&account)
+	if err != nil {
+		ctx.StopWithError(500, err)
+		return
+	}
 	ctx.JSON(account)
 }
 
@@ -130,9 +188,9 @@ func (c *Control) deleteAccount(ctx iris.Context) {
 		return
 	}
 
-	q := c.db.Delete(&models.Account{}, id)
-	if q.Error != nil {
-		ctx.StopWithError(500, q.Error)
+	err = c.accountService.DeleteAccount(id)
+	if err != nil {
+		ctx.StopWithError(500, err)
 		return
 	}
 	ctx.StopWithStatus(204)
@@ -145,20 +203,15 @@ func (c *Control) selectAccount(ctx iris.Context) {
 		return
 	}
 
-	var account models.Account
-	q := c.db.First(&account, id)
-	if q.Error != nil {
-		ctx.StopWithError(500, q.Error)
-		return
+	err = c.accountService.SelectAccount(id)
+	resp := &types.StatusResponse{
+		Account:  c.ones.Account(),
+		Instance: c.ones.Instance(),
 	}
-
-	c.ones.SetAccount(&account)
-	c.ones.SetAuthUpdatedCallback(func(info *types.User) {
-		account.Token = info.Token
-		account.UserUUID = info.UUID
-		c.db.Save(&account)
-	})
-	c.status(ctx)
+	if err != nil {
+		resp.ErrorMsg = err.Error()
+	}
+	ctx.JSON(resp)
 }
 
 func (c *Control) status(ctx iris.Context) {

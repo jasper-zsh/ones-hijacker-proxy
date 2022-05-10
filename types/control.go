@@ -11,6 +11,7 @@ type AuthInfo struct {
 type StatusResponse struct {
 	Account  *models.Account  `json:"account"`
 	Instance *models.Instance `json:"instance"`
+	ErrorMsg string           `json:"error_msg"`
 }
 
 type Timing struct {

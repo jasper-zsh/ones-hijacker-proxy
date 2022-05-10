@@ -1,10 +1,12 @@
 package main
 
 import (
+	"github.com/jasper-zsh/ones-hijacker-proxy/cert"
 	"github.com/jasper-zsh/ones-hijacker-proxy/control"
 	"github.com/jasper-zsh/ones-hijacker-proxy/dao"
 	"github.com/jasper-zsh/ones-hijacker-proxy/errors"
 	"github.com/jasper-zsh/ones-hijacker-proxy/handlers"
+	"github.com/jasper-zsh/ones-hijacker-proxy/services"
 	"gopkg.in/elazarl/goproxy.v1"
 	"net/http"
 	_ "net/http/pprof"
@@ -17,8 +19,14 @@ func main() {
 		panic(err)
 	}
 	proxy := goproxy.NewProxyHttpServer()
+	proxy.CertStore = cert.NewCertStorage()
 	ones := handlers.NewONESRequestHandler()
-	ctl := control.NewControl(db, ones)
+	ctl := control.NewControl(
+		db,
+		ones,
+		services.NewAccountService(db, ones),
+		services.NewInstanceService(db, ones),
+	)
 	err = ctl.SelectDefaultInstance()
 	errors.OrPanic(err)
 	err = ctl.SelectDefaultAccount()

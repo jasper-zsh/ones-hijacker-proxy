@@ -8,6 +8,7 @@ import (
 	"github.com/jasper-zsh/ones-hijacker-proxy/models"
 	"github.com/jasper-zsh/ones-hijacker-proxy/types"
 	"gopkg.in/elazarl/goproxy.v1"
+	"io/ioutil"
 	"net/http"
 	"regexp"
 	"sync"
@@ -33,11 +34,17 @@ func NewONESRequestHandler() *ONESRequestHandler {
 
 func (h *ONESRequestHandler) SetInstance(instance *models.Instance) {
 	h.instance = instance
-	h.authInfo = nil
 }
 
 func (h *ONESRequestHandler) SetAccount(account *models.Account) {
 	h.account = account
+}
+
+func (h *ONESRequestHandler) SetAuthInfo(authInfo *types.User) {
+	h.authInfo = authInfo
+}
+
+func (h *ONESRequestHandler) ClearAuthInfo() {
 	h.authInfo = nil
 }
 
@@ -51,6 +58,10 @@ func (h *ONESRequestHandler) Account() *models.Account {
 
 func (h *ONESRequestHandler) Instance() *models.Instance {
 	return h.instance
+}
+
+func (h *ONESRequestHandler) AuthInfo() *types.User {
+	return h.authInfo
 }
 
 func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
@@ -105,7 +116,7 @@ func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*
 
 func (h *ONESRequestHandler) injectAuth(ctx *goproxy.ProxyCtx, req *http.Request) error {
 	if h.authInfo == nil {
-		err := h.login(ctx)
+		err := h.Login(ctx)
 		if err != nil {
 			ctx.Warnf("Failed to login. %s", err.Error())
 			return err
@@ -125,13 +136,15 @@ func (h *ONESRequestHandler) injectAuth(ctx *goproxy.ProxyCtx, req *http.Request
 	return nil
 }
 
-func (h *ONESRequestHandler) login(ctx *goproxy.ProxyCtx) error {
+func (h *ONESRequestHandler) Login(ctx *goproxy.ProxyCtx) error {
 	h.loginLock.Lock()
 	defer h.loginLock.Unlock()
 	if h.authInfo != nil {
 		return nil
 	}
-	ctx.Warnf("Logging %s to  %s", h.account.Email, h.instance.BaseURL)
+	if ctx != nil {
+		ctx.Warnf("Logging %s to  %s", h.account.Email, h.instance.BaseURL)
+	}
 	body, err := json.Marshal(types.LoginRequest{
 		Email:    h.account.Email,
 		Password: h.account.Password,
@@ -142,10 +155,28 @@ func (h *ONESRequestHandler) login(ctx *goproxy.ProxyCtx) error {
 	loginUrl := fmt.Sprintf("%s/auth/login", h.instance.BaseURL)
 	req, err := http.NewRequest("POST", loginUrl, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Referer", ctx.Req.Header.Get("Referer"))
+	if ctx != nil {
+		req.Header.Set("Referer", ctx.Req.Header.Get("Referer"))
+	} else {
+		req.Header.Set("Referer", "https://dev.myones.net/project/master/")
+	}
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return err
+	}
+	if resp.StatusCode != 200 {
+		switch resp.StatusCode {
+		case 401:
+			return fmt.Errorf("账号或密码错误")
+		case 502:
+			return fmt.Errorf("服务挂了")
+		default:
+			body, err := ioutil.ReadAll(resp.Body)
+			if err != nil {
+				return err
+			}
+			return fmt.Errorf("error response: %s", body[0:30])
+		}
 	}
 	respDecoder := json.NewDecoder(resp.Body)
 	loginRes := types.LoginResponse{}

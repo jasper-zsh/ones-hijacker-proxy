@@ -1,6 +1,13 @@
-module github.com/jasper-zsh/ones-ones-hijacker-proxy
+module github.com/jasper-zsh/ones-hijacker-proxy
 
 go 1.18
+
+require (
+	github.com/kataras/iris/v12 v12.2.0-beta1.0.20220504234903-98518d8e20f9
+	gopkg.in/elazarl/goproxy.v1 v1.0.0-20180725130230-947c36da3153
+	gorm.io/driver/sqlite v1.3.2
+	gorm.io/gorm v1.23.5
+)
 
 require (
 	github.com/BurntSushi/toml v1.1.0 // indirect
@@ -24,7 +31,6 @@ require (
 	github.com/json-iterator/go v1.1.12 // indirect
 	github.com/kataras/blocks v0.0.5 // indirect
 	github.com/kataras/golog v0.1.7 // indirect
-	github.com/kataras/iris/v12 v12.2.0-beta1.0.20220504234903-98518d8e20f9 // indirect
 	github.com/kataras/pio v0.0.10 // indirect
 	github.com/kataras/sitemap v0.0.5 // indirect
 	github.com/kataras/tunnel v0.0.3 // indirect
@@ -50,9 +56,6 @@ require (
 	golang.org/x/text v0.3.7 // indirect
 	golang.org/x/time v0.0.0-20220411224347-583f2d630306 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
-	gopkg.in/elazarl/goproxy.v1 v1.0.0-20180725130230-947c36da3153 // indirect
 	gopkg.in/ini.v1 v1.66.4 // indirect
 	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
-	gorm.io/driver/sqlite v1.3.2 // indirect
-	gorm.io/gorm v1.23.5 // indirect
 )
