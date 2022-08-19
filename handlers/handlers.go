@@ -77,22 +77,25 @@ func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*
 			ctx.Warnf("Hijacking ONES %s API request %s", matches[2], req.RequestURI)
 			baseUrl := h.baseUrl(matches[2], matches[3])
 			nReq, err := http.NewRequest(req.Method, baseUrl, req.Body)
-			if resp := errors.ErrorResponse(req, err); resp != nil {
-				return req, resp
+			if err != nil {
+				return req, errors.ErrorResponse(req, err)
 			}
 			nReq.Header = req.Header
 
 			timing("inject_auth", func() {
 				err = h.injectAuth(ctx, nReq)
 			})
-			if resp := errors.ErrorResponse(req, err); resp != nil {
-				return req, resp
+			if err != nil {
+				return req, errors.ErrorResponse(req, err)
 			}
 
 			var resp *http.Response
 			timing("request", func() {
 				resp, err = http.DefaultClient.Do(nReq)
 			})
+			if err != nil {
+				return req, errors.ErrorResponse(req, err)
+			}
 			if resp.StatusCode == 401 || resp.StatusCode == 802 {
 				ctx.Warnf("Auth expired for %s", h.Account.Email)
 				if h.AuthExpired != nil {
