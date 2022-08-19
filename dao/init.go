@@ -15,6 +15,7 @@ func InitDB() (*gorm.DB, error) {
 		&models.Instance{},
 		&models.Account{},
 		&models.Binding{},
+		&models.Variable{},
 	)
 	if err != nil {
 		return nil, err

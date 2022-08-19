@@ -35,6 +35,8 @@ func main() {
 		errors.OrPanic(err)
 		err = ctl.SelectDefaultAccount()
 		errors.OrPanic(err)
+		err = ctl.LoadBinding()
+		errors.OrPanic(err)
 		proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("dev\\.myones\\.net"))).
 			HandleConnect(goproxy.AlwaysMitm)
 		proxy.OnRequest().Do(ones)

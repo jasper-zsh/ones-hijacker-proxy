@@ -49,22 +49,67 @@ func (c *Control) Run() {
 }
 
 func (c *Control) SelectDefaultInstance() error {
-	var instance models.Instance
-	q := c.deps.DB.First(&instance)
+	var defVar *models.Variable
+	q := c.deps.DB.Find(&defVar, "key = ?", services.KeyDefaultInstanceID)
 	if q.Error != nil {
 		return q.Error
 	}
-	c.deps.Handler.Instance = &instance
+	var instance *models.Instance
+	if defVar != nil {
+		q = c.deps.DB.Find(&instance, defVar.Value)
+		if q.Error != nil {
+			return q.Error
+		}
+		if instance == nil {
+			c.deps.DB.Delete(defVar)
+			q = c.deps.DB.First(&instance)
+			if q.Error != nil {
+				return q.Error
+			}
+		}
+	}
+	c.deps.Handler.Instance = instance
 	return nil
 }
 
 func (c *Control) SelectDefaultAccount() error {
-	var account models.Account
-	q := c.deps.DB.First(&account)
+	var defVar *models.Variable
+	q := c.deps.DB.Find(&defVar, "key = ?", services.KeyDefaultAccountID)
 	if q.Error != nil {
 		return q.Error
 	}
-	c.deps.Handler.Account = &account
+	var account *models.Account
+	if defVar != nil {
+		q = c.deps.DB.Find(&account, defVar.Value)
+		if q.Error != nil {
+			return q.Error
+		}
+		if account == nil {
+			c.deps.DB.Delete(defVar)
+			q = c.deps.DB.First(&account)
+			if q.Error != nil {
+				return q.Error
+			}
+		}
+	}
+	c.deps.Handler.Account = account
+	return nil
+}
+
+func (c *Control) LoadBinding() error {
+	if c.deps.Handler.Account != nil && c.deps.Handler.Instance != nil {
+		var binding *models.Binding
+		q := c.deps.DB.
+			Where("account_id = ?", c.deps.Handler.Account.ID).
+			Where("instance_id = ?", c.deps.Handler.Instance.ID).
+			Find(&binding)
+		if q.Error != nil {
+			return q.Error
+		}
+		if binding != nil {
+			c.deps.Handler.Binding = binding
+		}
+	}
 	return nil
 }
 

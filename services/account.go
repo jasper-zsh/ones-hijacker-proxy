@@ -5,6 +5,11 @@ import (
 	"github.com/jasper-zsh/ones-hijacker-proxy/models"
 	"go.uber.org/dig"
 	"gorm.io/gorm"
+	"strconv"
+)
+
+const (
+	KeyDefaultAccountID = "DEFAULT_ACCOUNT_ID"
 )
 
 type AccountServiceDeps struct {
@@ -49,11 +54,20 @@ func (s *AccountService) DeleteAccount(id uint) error {
 	return nil
 }
 
-func (s *AccountService) SelectAccount(id uint) error {
+func (s *AccountService) SelectAccount(id uint) (err error) {
+	defer func() {
+		if err == nil {
+			s.deps.DB.Save(&models.Variable{
+				Key:   KeyDefaultAccountID,
+				Value: strconv.Itoa(int(id)),
+			})
+		}
+	}()
 	var account *models.Account
 	q := s.deps.DB.First(&account, id)
 	if q.Error != nil {
-		return q.Error
+		err = q.Error
+		return
 	}
 
 	var binding *models.Binding
@@ -62,21 +76,24 @@ func (s *AccountService) SelectAccount(id uint) error {
 		"instance_id": s.deps.Handler.Instance.ID,
 	})
 	if q.Error != nil {
-		return q.Error
+		err = q.Error
+		return
 	}
 	if binding != nil {
+		s.deps.Handler.Account = account
 		s.deps.Handler.Binding = binding
+		return
 	}
 
 	originAccount := s.deps.Handler.Account
 	originBinding := s.deps.Handler.Binding
 	s.deps.Handler.Binding = nil
 	s.deps.Handler.Account = account
-	err := s.deps.Handler.Login(nil)
+	err = s.deps.Handler.Login(nil)
 	if err != nil {
 		s.deps.Handler.Account = originAccount
 		s.deps.Handler.Binding = originBinding
-		return err
+		return
 	}
-	return nil
+	return
 }

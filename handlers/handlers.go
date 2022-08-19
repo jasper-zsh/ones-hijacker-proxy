@@ -15,6 +15,12 @@ import (
 	"time"
 )
 
+const (
+	ModeDev        = "DEV"
+	ModeUrl        = "URL"
+	ModeStandalone = "STANDALONE"
+)
+
 var _ goproxy.ReqHandler = (*ONESRequestHandler)(nil)
 
 type AuthUpdatedCallback = func(binding *models.Binding)
@@ -34,6 +40,19 @@ func NewONESRequestHandler() *ONESRequestHandler {
 	return r
 }
 
+func (h *ONESRequestHandler) baseUrl(service, path string) string {
+	var baseUrl string
+	switch h.Instance.Mode {
+	case ModeDev:
+		baseUrl = fmt.Sprintf("https://devapi.myones.net/%s/%s/%s", service, h.Instance.BaseURL, path)
+	case ModeStandalone:
+		baseUrl = fmt.Sprintf("%s/%s/api/%s/%s", h.Instance.BaseURL, service, service, path)
+	default:
+		baseUrl = fmt.Sprintf("%s/%s", h.Instance.BaseURL, path)
+	}
+	return baseUrl
+}
+
 func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 	ctx.UserData = make([]types.Timing, 0)
 	timing := func(period string, fun func()) {
@@ -49,8 +68,8 @@ func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*
 		matches := rule.FindStringSubmatch(req.RequestURI)
 		if len(matches) > 0 {
 			ctx.Warnf("Hijacking ONES %s API request %s", matches[2], req.RequestURI)
-
-			nReq, err := http.NewRequest(req.Method, fmt.Sprintf("%s/%s", h.Instance.BaseURL, matches[3]), req.Body)
+			baseUrl := h.baseUrl(matches[2], matches[3])
+			nReq, err := http.NewRequest(req.Method, baseUrl, req.Body)
 			if resp := errors.ErrorResponse(req, err); resp != nil {
 				return req, resp
 			}
@@ -67,7 +86,7 @@ func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*
 			timing("request", func() {
 				resp, err = http.DefaultClient.Do(nReq)
 			})
-			if resp.StatusCode == 401 {
+			if resp.StatusCode == 401 || resp.StatusCode == 802 {
 				ctx.Warnf("Auth expired for %s", h.Account.Email)
 				if h.AuthExpired != nil {
 					h.AuthExpired(h.Binding)
@@ -125,7 +144,7 @@ func (h *ONESRequestHandler) Login(ctx *goproxy.ProxyCtx) error {
 	if err != nil {
 		return err
 	}
-	loginUrl := fmt.Sprintf("%s/auth/login", h.Instance.BaseURL)
+	loginUrl := h.baseUrl("project", "auth/login")
 	req, err := http.NewRequest("POST", loginUrl, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	if ctx != nil {
