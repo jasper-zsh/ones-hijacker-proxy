@@ -3,7 +3,6 @@ package services
 import (
 	"github.com/jasper-zsh/ones-hijacker-proxy/handlers"
 	"github.com/jasper-zsh/ones-hijacker-proxy/models"
-	"github.com/jasper-zsh/ones-hijacker-proxy/types"
 	"go.uber.org/dig"
 	"gorm.io/gorm"
 )
@@ -57,19 +56,26 @@ func (s *AccountService) SelectAccount(id uint) error {
 		return q.Error
 	}
 
-	originAccount := s.deps.Handler.Account()
-	originAuth := s.deps.Handler.AuthInfo()
-	s.deps.Handler.ClearAuthInfo()
-	s.deps.Handler.SetAccount(account)
-	s.deps.Handler.SetAuthUpdatedCallback(func(info *types.User) {
-		account.Token = info.Token
-		account.UserUUID = info.UUID
-		s.deps.DB.Save(account)
+	var binding *models.Binding
+	q = s.deps.DB.Find(&binding, map[string]interface{}{
+		"account_id":  account.ID,
+		"instance_id": s.deps.Handler.Instance.ID,
 	})
+	if q.Error != nil {
+		return q.Error
+	}
+	if binding != nil {
+		s.deps.Handler.Binding = binding
+	}
+
+	originAccount := s.deps.Handler.Account
+	originBinding := s.deps.Handler.Binding
+	s.deps.Handler.Binding = nil
+	s.deps.Handler.Account = account
 	err := s.deps.Handler.Login(nil)
 	if err != nil {
-		s.deps.Handler.SetAccount(originAccount)
-		s.deps.Handler.SetAuthInfo(originAuth)
+		s.deps.Handler.Account = originAccount
+		s.deps.Handler.Binding = originBinding
 		return err
 	}
 	return nil

@@ -7,8 +7,6 @@ type Account struct {
 	Email      string `json:"email"`
 	Password   string `json:"password"`
 	Note       string `json:"note"`
-	UserUUID   string
-	Token      string
 	InstanceID uint
 	Instance   *Instance
 }

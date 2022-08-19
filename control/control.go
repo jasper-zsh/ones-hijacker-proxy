@@ -54,7 +54,7 @@ func (c *Control) SelectDefaultInstance() error {
 	if q.Error != nil {
 		return q.Error
 	}
-	c.deps.Handler.SetInstance(&instance)
+	c.deps.Handler.Instance = &instance
 	return nil
 }
 
@@ -64,7 +64,7 @@ func (c *Control) SelectDefaultAccount() error {
 	if q.Error != nil {
 		return q.Error
 	}
-	c.deps.Handler.SetAccount(&account)
+	c.deps.Handler.Account = &account
 	return nil
 }
 
@@ -134,8 +134,8 @@ func (c *Control) selectInstance(ctx iris.Context) {
 
 	err = c.deps.InstanceService.SelectInstance(id)
 	resp := &types.StatusResponse{
-		Account:  c.deps.Handler.Account(),
-		Instance: c.deps.Handler.Instance(),
+		Account:  c.deps.Handler.Account,
+		Instance: c.deps.Handler.Instance,
 	}
 	if err != nil {
 		resp.ErrorMsg = err.Error()
@@ -207,8 +207,8 @@ func (c *Control) selectAccount(ctx iris.Context) {
 
 	err = c.deps.AccountService.SelectAccount(id)
 	resp := &types.StatusResponse{
-		Account:  c.deps.Handler.Account(),
-		Instance: c.deps.Handler.Instance(),
+		Account:  c.deps.Handler.Account,
+		Instance: c.deps.Handler.Instance,
 	}
 	if err != nil {
 		resp.ErrorMsg = err.Error()
@@ -218,8 +218,8 @@ func (c *Control) selectAccount(ctx iris.Context) {
 
 func (c *Control) status(ctx iris.Context) {
 	status := &types.StatusResponse{
-		Account:  c.deps.Handler.Account(),
-		Instance: c.deps.Handler.Instance(),
+		Account:  c.deps.Handler.Account,
+		Instance: c.deps.Handler.Instance,
 	}
 	ctx.JSON(status)
 }

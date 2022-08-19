@@ -7,8 +7,10 @@ import (
 	"github.com/jasper-zsh/ones-hijacker-proxy/dao"
 	"github.com/jasper-zsh/ones-hijacker-proxy/errors"
 	"github.com/jasper-zsh/ones-hijacker-proxy/handlers"
+	"github.com/jasper-zsh/ones-hijacker-proxy/models"
 	"github.com/jasper-zsh/ones-hijacker-proxy/services"
 	"go.uber.org/dig"
+	"gorm.io/gorm"
 	"net/http"
 	_ "net/http/pprof"
 	"regexp"
@@ -22,7 +24,13 @@ func main() {
 	services.Provide(c)
 	handlers.Provide(c)
 	control.Provide(c)
-	err := c.Invoke(func(ctl *control.Control, ones *handlers.ONESRequestHandler) {
+	err := c.Invoke(func(db *gorm.DB, ctl *control.Control, ones *handlers.ONESRequestHandler) {
+		ones.AuthUpdated = func(binding *models.Binding) {
+			db.Save(binding)
+		}
+		ones.AuthExpired = func(binding *models.Binding) {
+			db.Delete(binding)
+		}
 		err := ctl.SelectDefaultInstance()
 		errors.OrPanic(err)
 		err = ctl.SelectDefaultAccount()

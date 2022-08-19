@@ -58,14 +58,14 @@ func (s *InstanceService) SelectInstance(id uint) error {
 		return q.Error
 	}
 
-	originInstance := s.deps.Handler.Instance()
-	originAuth := s.deps.Handler.AuthInfo()
-	s.deps.Handler.ClearAuthInfo()
-	s.deps.Handler.SetInstance(instance)
+	originInstance := s.deps.Handler.Instance
+	originBinding := s.deps.Handler.Binding
+	s.deps.Handler.Binding = nil
+	s.deps.Handler.Instance = instance
 	err := s.deps.Handler.Login(nil)
 	if err != nil {
-		s.deps.Handler.SetInstance(originInstance)
-		s.deps.Handler.SetAuthInfo(originAuth)
+		s.deps.Handler.Instance = originInstance
+		s.deps.Handler.Binding = originBinding
 		return err
 	}
 	return nil

@@ -17,51 +17,21 @@ import (
 
 var _ goproxy.ReqHandler = (*ONESRequestHandler)(nil)
 
-type AuthUpdatedCallback = func(info *types.User)
+type AuthUpdatedCallback = func(binding *models.Binding)
+type AuthExpiredCallback = func(binding *models.Binding)
 
 type ONESRequestHandler struct {
-	instance    *models.Instance
-	account     *models.Account
-	authInfo    *types.User
-	authUpdated AuthUpdatedCallback
+	Instance    *models.Instance
+	Account     *models.Account
+	Binding     *models.Binding
+	AuthUpdated AuthUpdatedCallback
+	AuthExpired AuthExpiredCallback
 	loginLock   sync.Mutex
 }
 
 func NewONESRequestHandler() *ONESRequestHandler {
 	r := &ONESRequestHandler{}
 	return r
-}
-
-func (h *ONESRequestHandler) SetInstance(instance *models.Instance) {
-	h.instance = instance
-}
-
-func (h *ONESRequestHandler) SetAccount(account *models.Account) {
-	h.account = account
-}
-
-func (h *ONESRequestHandler) SetAuthInfo(authInfo *types.User) {
-	h.authInfo = authInfo
-}
-
-func (h *ONESRequestHandler) ClearAuthInfo() {
-	h.authInfo = nil
-}
-
-func (h *ONESRequestHandler) SetAuthUpdatedCallback(cb AuthUpdatedCallback) {
-	h.authUpdated = cb
-}
-
-func (h *ONESRequestHandler) Account() *models.Account {
-	return h.account
-}
-
-func (h *ONESRequestHandler) Instance() *models.Instance {
-	return h.instance
-}
-
-func (h *ONESRequestHandler) AuthInfo() *types.User {
-	return h.authInfo
 }
 
 func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
@@ -80,7 +50,7 @@ func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*
 		if len(matches) > 0 {
 			ctx.Warnf("Hijacking ONES %s API request %s", matches[2], req.RequestURI)
 
-			nReq, err := http.NewRequest(req.Method, fmt.Sprintf("%s/%s", h.instance.BaseURL, matches[3]), req.Body)
+			nReq, err := http.NewRequest(req.Method, fmt.Sprintf("%s/%s", h.Instance.BaseURL, matches[3]), req.Body)
 			if resp := errors.ErrorResponse(req, err); resp != nil {
 				return req, resp
 			}
@@ -98,8 +68,11 @@ func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*
 				resp, err = http.DefaultClient.Do(nReq)
 			})
 			if resp.StatusCode == 401 {
-				ctx.Warnf("Auth expired for %s", h.authInfo.Email)
-				h.authInfo = nil
+				ctx.Warnf("Auth expired for %s", h.Account.Email)
+				if h.AuthExpired != nil {
+					h.AuthExpired(h.Binding)
+				}
+				h.Binding = nil
 			}
 			if resp := errors.ErrorResponse(req, err); resp != nil {
 				return req, resp
@@ -115,44 +88,44 @@ func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*
 }
 
 func (h *ONESRequestHandler) injectAuth(ctx *goproxy.ProxyCtx, req *http.Request) error {
-	if h.authInfo == nil {
+	if h.Binding == nil {
 		err := h.Login(ctx)
 		if err != nil {
 			ctx.Warnf("Failed to login. %s", err.Error())
 			return err
 		}
-		ctx.Warnf("Logged as %s", h.authInfo.Email)
+		ctx.Warnf("Logged as %s", h.Account.Email)
 	}
-	req.Header.Set("Ones-Auth-Token", h.authInfo.Token)
+	req.Header.Set("Ones-Auth-Token", h.Binding.Token)
 	req.AddCookie(&http.Cookie{
 		Name:  "uid",
-		Value: h.authInfo.UUID,
+		Value: h.Binding.UserUUID,
 	})
 	req.AddCookie(&http.Cookie{
 		Name:  "lt",
-		Value: h.authInfo.Token,
+		Value: h.Binding.Token,
 	})
-	req.Header.Set("Ones-User-Id", h.authInfo.UUID)
+	req.Header.Set("Ones-User-Id", h.Binding.UserUUID)
 	return nil
 }
 
 func (h *ONESRequestHandler) Login(ctx *goproxy.ProxyCtx) error {
 	h.loginLock.Lock()
 	defer h.loginLock.Unlock()
-	if h.authInfo != nil {
+	if h.Binding != nil {
 		return nil
 	}
 	if ctx != nil {
-		ctx.Warnf("Logging %s to  %s", h.account.Email, h.instance.BaseURL)
+		ctx.Warnf("Logging %s to  %s", h.Account.Email, h.Instance.BaseURL)
 	}
 	body, err := json.Marshal(types.LoginRequest{
-		Email:    h.account.Email,
-		Password: h.account.Password,
+		Email:    h.Account.Email,
+		Password: h.Account.Password,
 	})
 	if err != nil {
 		return err
 	}
-	loginUrl := fmt.Sprintf("%s/auth/login", h.instance.BaseURL)
+	loginUrl := fmt.Sprintf("%s/auth/login", h.Instance.BaseURL)
 	req, err := http.NewRequest("POST", loginUrl, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	if ctx != nil {
@@ -184,9 +157,14 @@ func (h *ONESRequestHandler) Login(ctx *goproxy.ProxyCtx) error {
 	if err != nil {
 		return err
 	}
-	h.authInfo = loginRes.User
-	if h.authUpdated != nil {
-		h.authUpdated(loginRes.User)
+	h.Binding = &models.Binding{
+		AccountID:  h.Account.ID,
+		InstanceID: h.Instance.ID,
+		UserUUID:   loginRes.User.UUID,
+		Token:      loginRes.User.Token,
+	}
+	if h.AuthUpdated != nil {
+		h.AuthUpdated(h.Binding)
 	}
 
 	return nil

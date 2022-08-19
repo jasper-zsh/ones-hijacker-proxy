@@ -11,7 +11,11 @@ func InitDB() (*gorm.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = db.AutoMigrate(&models.Instance{}, &models.Account{})
+	err = db.AutoMigrate(
+		&models.Instance{},
+		&models.Account{},
+		&models.Binding{},
+	)
 	if err != nil {
 		return nil, err
 	}
