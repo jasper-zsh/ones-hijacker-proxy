@@ -44,11 +44,18 @@ func (h *ONESRequestHandler) baseUrl(service, path string) string {
 	var baseUrl string
 	switch h.Instance.Mode {
 	case ModeDev:
-		baseUrl = fmt.Sprintf("https://devapi.myones.net/%s/%s/%s", service, h.Instance.BaseURL, path)
+		baseUrl = fmt.Sprintf("https://devapi.myones.net/%s/%s/%s", service, h.Instance.Project, path)
 	case ModeStandalone:
-		baseUrl = fmt.Sprintf("%s/%s/api/%s/%s", h.Instance.BaseURL, service, service, path)
+		baseUrl = fmt.Sprintf("%s/%s/api/%s/%s", h.Instance.Project, service, service, path)
 	default:
-		baseUrl = fmt.Sprintf("%s/%s", h.Instance.BaseURL, path)
+		url := h.Instance.Project
+		switch service {
+		case "project":
+			url = h.Instance.Project
+		case "wiki":
+			url = h.Instance.Wiki
+		}
+		baseUrl = fmt.Sprintf("%s/%s", url, path)
 	}
 	return baseUrl
 }
@@ -134,8 +141,9 @@ func (h *ONESRequestHandler) Login(ctx *goproxy.ProxyCtx) error {
 	if h.Binding != nil {
 		return nil
 	}
+	loginUrl := h.baseUrl("project", "auth/login")
 	if ctx != nil {
-		ctx.Warnf("Logging %s to  %s", h.Account.Email, h.Instance.BaseURL)
+		ctx.Warnf("Logging %s to  %s", h.Account.Email, loginUrl)
 	}
 	body, err := json.Marshal(types.LoginRequest{
 		Email:    h.Account.Email,
@@ -144,7 +152,6 @@ func (h *ONESRequestHandler) Login(ctx *goproxy.ProxyCtx) error {
 	if err != nil {
 		return err
 	}
-	loginUrl := h.baseUrl("project", "auth/login")
 	req, err := http.NewRequest("POST", loginUrl, bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	if ctx != nil {

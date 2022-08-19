@@ -152,6 +152,11 @@ func (c *Control) updateInstance(ctx iris.Context) {
 		ctx.StopWithError(500, err)
 		return
 	}
+	err = c.deps.InstanceService.SelectInstance(instance.ID)
+	if err != nil {
+		ctx.StopWithError(500, err)
+		return
+	}
 
 	ctx.JSON(instance)
 }
@@ -221,6 +226,12 @@ func (c *Control) updateAccount(ctx iris.Context) {
 	}
 	account.ID = id
 	err = c.deps.AccountService.SaveAccount(&account)
+	if err != nil {
+		ctx.StopWithError(500, err)
+		return
+	}
+
+	err = c.deps.AccountService.SelectAccount(account.ID)
 	if err != nil {
 		ctx.StopWithError(500, err)
 		return
