@@ -16,6 +16,26 @@ import (
 	"regexp"
 )
 
+type ReqHandlerWrapper struct {
+	*handlers.ONESRequestHandler
+}
+
+func (r ReqHandlerWrapper) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+	return r.FilterReq(req, ctx)
+}
+
+var _ goproxy.ReqHandler = (*ReqHandlerWrapper)(nil)
+
+type RespHandlerWrapper struct {
+	*handlers.ONESRequestHandler
+}
+
+func (r RespHandlerWrapper) Handle(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+	return r.FilterResp(resp, ctx)
+}
+
+var _ goproxy.RespHandler = (*RespHandlerWrapper)(nil)
+
 func main() {
 	proxy := goproxy.NewProxyHttpServer()
 	proxy.CertStore = cert.NewCertStorage()
@@ -39,7 +59,8 @@ func main() {
 		errors.OrPanic(err)
 		proxy.OnRequest(goproxy.ReqHostMatches(regexp.MustCompile("dev\\.myones\\.net"))).
 			HandleConnect(goproxy.AlwaysMitm)
-		proxy.OnRequest().Do(ones)
+		proxy.OnRequest().Do(ReqHandlerWrapper{ones})
+		proxy.OnResponse().Do(RespHandlerWrapper{ones})
 
 		proxy.Verbose = false
 		go func() {

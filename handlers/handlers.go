@@ -11,6 +11,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,8 +21,6 @@ const (
 	ModeUrl        = "URL"
 	ModeStandalone = "STANDALONE"
 )
-
-var _ goproxy.ReqHandler = (*ONESRequestHandler)(nil)
 
 type AuthUpdatedCallback = func(binding *models.Binding)
 type AuthExpiredCallback = func(binding *models.Binding)
@@ -60,7 +59,7 @@ func (h *ONESRequestHandler) baseUrl(service, path string) string {
 	return baseUrl
 }
 
-func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
+func (h *ONESRequestHandler) FilterReq(req *http.Request, ctx *goproxy.ProxyCtx) (*http.Request, *http.Response) {
 	ctx.UserData = make([]types.Timing, 0)
 	timing := func(period string, fun func()) {
 		ts := time.Now().UnixMilli()
@@ -70,15 +69,23 @@ func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*
 			Duration: time.Now().UnixMilli() - ts,
 		})
 	}
-	rule := regexp.MustCompile("/project/(.*?)/api/(.*?)/(.*)")
+	rule := regexp.MustCompile("/(.*?)/(.*?)/api/(.*?)/(.*)")
 	if req.Host == "dev.myones.net" {
 		matches := rule.FindStringSubmatch(req.RequestURI)
 		if len(matches) > 0 {
-			ctx.Warnf("Hijacking ONES %s API request %s", matches[2], req.RequestURI)
-			baseUrl := h.baseUrl(matches[2], matches[3])
+			ctx.Warnf("Hijacking ONES %s API request %s", matches[3], req.RequestURI)
+			baseUrl := h.baseUrl(matches[3], matches[4])
 			nReq, err := http.NewRequest(req.Method, baseUrl, req.Body)
 			if err != nil {
 				return req, errors.ErrorResponse(req, err)
+			}
+			if strings.Index(nReq.URL.Host, ":") < 0 {
+				switch nReq.URL.Scheme {
+				case "https":
+					nReq.URL.Host = nReq.URL.Host + ":443"
+				case "http":
+					nReq.URL.Host = nReq.URL.Host + ":80"
+				}
 			}
 			nReq.Header = req.Header
 
@@ -89,31 +96,24 @@ func (h *ONESRequestHandler) Handle(req *http.Request, ctx *goproxy.ProxyCtx) (*
 				return req, errors.ErrorResponse(req, err)
 			}
 
-			var resp *http.Response
-			timing("request", func() {
-				resp, err = http.DefaultClient.Do(nReq)
-			})
-			if err != nil {
-				return req, errors.ErrorResponse(req, err)
-			}
-			if resp.StatusCode == 401 || resp.StatusCode == 802 {
-				ctx.Warnf("Auth expired for %s", h.Account.Email)
-				if h.AuthExpired != nil {
-					h.AuthExpired(h.Binding)
-				}
-				h.Binding = nil
-			}
-			if resp := errors.ErrorResponse(req, err); resp != nil {
-				return req, resp
-			}
-
-			for _, timing := range ctx.UserData.([]types.Timing) {
-				resp.Header.Add("Server-Timing", fmt.Sprintf("%s;dur=%d", timing.Period, timing.Duration))
-			}
-			return req, resp
+			return nReq, nil
 		}
 	}
 	return req, nil
+}
+
+func (h *ONESRequestHandler) FilterResp(resp *http.Response, ctx *goproxy.ProxyCtx) *http.Response {
+	if resp.StatusCode == 401 || resp.StatusCode == 802 {
+		ctx.Warnf("Auth expired for %s", h.Account.Email)
+		if h.AuthExpired != nil {
+			h.AuthExpired(h.Binding)
+		}
+		h.Binding = nil
+	}
+	for _, timing := range ctx.UserData.([]types.Timing) {
+		resp.Header.Add("Server-Timing", fmt.Sprintf("%s;dur=%d", timing.Period, timing.Duration))
+	}
+	return resp
 }
 
 func (h *ONESRequestHandler) injectAuth(ctx *goproxy.ProxyCtx, req *http.Request) error {
